@@ -3,187 +3,180 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>影片快剪工具</title>
+<title>簡易剪輯</title>
 <link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#141416">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="簡易剪輯">
 </head>
 <body>
-<div id="fileWarn" style="display:none;background:#fff4e5;border-bottom:1px solid #f0c48a;padding:14px 28px;font-size:15px;line-height:1.7">
-  <b>請不要直接雙擊 index.html 開啟。</b>瀏覽器的安全限制不允許從本機檔案載入處理引擎。<br>
-  請改用以下任一方式：① 雙擊資料夾裡的 <b>啟動工具.bat</b>（Windows）　② 使用 GitHub Pages 的網址開啟
+<div id="fileWarn" style="display:none;background:#fff4e5;color:#222;padding:14px 20px;font:15px/1.7 sans-serif">
+  <b>請不要直接雙擊 index.html 開啟。</b>瀏覽器的安全限制不允許從本機檔案載入剪輯引擎。<br>
+  請改用：① 先「全部解壓縮」，再雙擊 <b>啟動工具.bat</b>（Windows）　② VS Code 的 Live Server　③ GitHub Pages 網址
 </div>
 <script>if (location.protocol === 'file:') document.getElementById('fileWarn').style.display = 'block';</script>
-<header class="top">
-  <div class="brand">
-    <span class="mark">▶</span>
-    <div>
-      <h1>影片快剪工具</h1>
-      <p>裁切・分段・降轉・降噪・LOGO・字幕｜影片不會上傳，全部在你的瀏覽器裡處理</p>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><span class="mark">▶</span><b>簡易剪輯</b></div>
+    <div class="top-actions">
+      <button class="btn" id="importBtn">＋ 匯入素材</button>
+      <button class="btn primary" id="exportBtn" disabled>匯出影片</button>
+      <button class="btn ghost hidden" id="installBtn">安裝成 App</button>
+      <span id="engine" class="pill">引擎載入中…</span>
     </div>
-  </div>
-  <div id="engineStatus" class="pill">處理引擎載入中…</div>
-</header>
+    <input type="file" id="fileInput" multiple accept="video/*,audio/*,image/*,.mkv,.mov,.avi,.mxf" hidden>
+    <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp" hidden>
+    <input type="file" id="srtInput" accept=".srt" hidden>
+  </header>
 
-<main class="layout">
-  <!-- 左側：影片與片段 -->
-  <section class="col-main">
-    <div class="card">
-      <div id="dropzone" class="dropzone">
-        <input id="fileInput" type="file" accept="video/*,audio/*,.mkv,.mov,.mp4,.m4v,.webm,.avi,.mp3,.wav,.m4a">
-        <div class="dz-inner">
-          <strong>拖曳影片到這裡，或點一下選擇檔案</strong>
-          <span>支援 MP4、MOV、MKV、WebM、AVI，及 MP3／WAV／M4A 音檔（只做字幕）</span>
+  <main class="mid">
+    <!-- 素材庫 -->
+    <section class="panel bin">
+      <div class="panel-head">素材</div>
+      <div id="binList" class="bin-list"></div>
+      <div id="binDrop" class="bin-drop">拖曳影片、圖片、音樂到這裡<br><small>影片、圖片會接到影片軌最後面<br>音樂會放到播放頭的位置</small></div>
+    </section>
+
+    <!-- 預覽 -->
+    <section class="viewer">
+      <div class="stage" id="stage">
+        <canvas id="canvas"></canvas>
+        <div id="emptyHint" class="empty-hint">
+          <div class="big">把影片拖進來開始剪輯</div>
+          <div>或按左上角「＋ 匯入素材」</div>
         </div>
       </div>
-
-      <div id="playerWrap" class="player-wrap hidden">
-        <div class="player">
-          <video id="video" controls playsinline></video>
-          <img id="logoPreview" class="logo-preview hidden" alt="">
-        </div>
-        <div id="fileInfo" class="file-info"></div>
-        <p id="previewWarn" class="warn hidden">這個格式瀏覽器無法預覽，但仍可處理。請直接輸入時間碼來設定片段。</p>
+      <div class="transport">
+        <button class="icon" id="toStart" title="回到開頭（Home）">⏮</button>
+        <button class="icon" id="stepBack" title="上一格（←）">◀︎</button>
+        <button class="icon play" id="playBtn" title="播放／暫停（空白鍵）">▶</button>
+        <button class="icon" id="stepFwd" title="下一格（→）">▶︎</button>
+        <button class="icon" id="toEnd" title="到結尾（End）">⏭</button>
+        <span class="tc"><b id="tcNow">00:00.0</b> / <span id="tcTotal">00:00.0</span></span>
       </div>
+    </section>
+
+    <!-- 屬性 -->
+    <aside class="panel inspector">
+      <div class="tabs">
+        <button data-tab="props" class="on">屬性</button>
+        <button data-tab="subs">字幕清單</button>
+        <button data-tab="settings">設定</button>
+      </div>
+      <div class="tab-body" id="tab-props"></div>
+      <div class="tab-body hidden" id="tab-subs">
+        <div class="row gap">
+          <button class="btn small" id="autoSubBtn">🎤 自動產生字幕</button>
+          <button class="btn small ghost" id="importSrtBtn">匯入 SRT</button>
+          <button class="btn small ghost" id="exportSrtBtn">下載 SRT</button>
+        </div>
+        <div id="subList" class="sub-list"></div>
+      </div>
+      <div class="tab-body hidden" id="tab-settings">
+        <h4>LOGO</h4>
+        <div class="row gap"><button class="btn small" id="logoBtn">選擇 LOGO 圖片</button><button class="btn small ghost hidden" id="logoClear">移除</button></div>
+        <div id="logoName" class="muted small"></div>
+        <label class="field">位置
+          <select id="logoPos"><option value="tr">右上</option><option value="tl">左上</option><option value="br">右下</option><option value="bl">左下</option></select></label>
+        <label class="field">大小 <output id="logoSizeOut"></output><input type="range" id="logoSize" min="4" max="35"></label>
+        <label class="field">不透明度 <output id="logoOpacityOut"></output><input type="range" id="logoOpacity" min="20" max="100"></label>
+
+        <h4>聲音</h4>
+        <label class="check"><input type="checkbox" id="denoise"> 降噪（影片原音）</label>
+        <label class="field">降噪強度
+          <select id="denoiseLevel"><option value="10">輕微（冷氣、風扇）</option><option value="18">中等</option><option value="28">強（可能影響人聲）</option></select></label>
+        <label class="check"><input type="checkbox" id="loudnorm"> 音量標準化（-14 LUFS）</label>
+        <p class="muted small">降噪和音量標準化在匯出時套用，預覽聽不到效果。</p>
+
+        <h4>字幕</h4>
+        <label class="field">字幕大小 <output id="subSizeOut"></output><input type="range" id="subSize" min="3" max="10" step="0.5"></label>
+        <label class="field">辨識語言
+          <select id="subLang"><option value="chinese">中文</option><option value="english">英文</option><option value="japanese">日文</option><option value="">自動偵測</option></select></label>
+        <label class="field">辨識模型
+          <select id="subModel">
+            <option value="base">快速（base，約 80MB）</option>
+            <option value="small">標準（small，約 250MB）</option>
+            <option value="medium">medium（與電腦版相同，約 700MB～1GB）</option>
+            <option value="turbo">最準確（large-v3-turbo，約 760MB，需 WebGPU）</option>
+          </select></label>
+        <label class="check"><input type="checkbox" id="subTrad"> 轉成台灣繁體用字</label>
+      </div>
+    </aside>
+  </main>
+
+  <!-- 時間軸 -->
+  <section class="tl-wrap">
+    <div class="toolbar">
+      <button class="tool" id="splitBtn" title="在播放頭的位置切開（S）">✂ 分割<kbd>S</kbd></button>
+      <button class="tool" id="delBtn" title="刪除選取的項目（Delete）">🗑 刪除<kbd>Del</kbd></button>
+      <span class="sep"></span>
+      <button class="tool" id="addTitleBtn" title="在播放頭加入文字標題（T）">T 加標題</button>
+      <button class="tool" id="addSubBtn" title="在播放頭加入一句字幕">💬 加字幕</button>
+      <button class="tool" id="autoSubBtn2">🎤 自動字幕</button>
+      <span class="sep"></span>
+      <button class="tool" id="undoBtn" title="復原（Ctrl+Z）">↶ 復原</button>
+      <button class="tool" id="redoBtn" title="重做（Ctrl+Shift+Z）">↷ 重做</button>
+      <span class="grow"></span>
+      <span class="muted small">縮放</span>
+      <input type="range" id="zoom" min="2" max="300" value="40">
+      <button class="tool" id="fitBtn" title="整支影片放進畫面">↔ 全部</button>
     </div>
-
-    <div class="card" id="segCard">
-      <h2>裁切／分段</h2>
-      <p class="hint">播放到想要的位置，按「設為起點」「設為終點」，再按「加入片段」。可加入多段，每段輸出成一個檔案。<b>沒有加入片段就輸出整支影片。</b></p>
-      <div class="seg-controls">
-        <div class="time-field">
-          <label>起點</label>
-          <input id="segStart" type="text" value="00:00:00.000">
-          <button class="btn ghost" id="setStart">設為起點</button>
-        </div>
-        <div class="time-field">
-          <label>終點</label>
-          <input id="segEnd" type="text" value="00:00:00.000">
-          <button class="btn ghost" id="setEnd">設為終點</button>
-        </div>
-        <button class="btn" id="addSeg">＋ 加入片段</button>
+    <div class="timeline" id="timeline">
+      <div class="tl-labels">
+        <div class="lab ruler-lab"></div>
+        <div class="lab" data-track="title">標題</div>
+        <div class="lab" data-track="clip">影片</div>
+        <div class="lab" data-track="sub">字幕</div>
+        <div class="lab" data-track="music">音樂</div>
       </div>
-      <ol id="segList" class="seg-list"></ol>
-    </div>
-
-    <div class="card">
-      <div class="run-row">
-        <button class="btn primary big" id="runBtn" disabled>開始處理</button>
-        <button class="btn ghost hidden" id="cancelBtn">取消</button>
-        <div class="run-status">
-          <div id="statusText">請先選擇影片</div>
-          <div class="bar"><div id="barFill"></div></div>
+      <div class="tl-scroll" id="tlScroll">
+        <div class="tl-content" id="tlContent">
+          <div class="ruler" id="ruler"></div>
+          <div class="track" data-track="title"></div>
+          <div class="track" data-track="clip"></div>
+          <div class="track" data-track="sub"></div>
+          <div class="track" data-track="music"></div>
+          <div class="playhead" id="playhead"><div class="ph-head"></div></div>
+          <div class="drop-marker hidden" id="dropMarker"></div>
         </div>
       </div>
-      <div id="results" class="results"></div>
-      <details class="log">
-        <summary>處理紀錄</summary>
-        <pre id="log"></pre>
-      </details>
     </div>
   </section>
+</div>
 
-  <!-- 右側：設定 -->
-  <aside class="col-side">
-    <div class="card">
-      <h2>輸出方式</h2>
-      <label class="radio"><input type="radio" name="mode" value="encode" checked>
-        <span><b>重新編碼</b><small>可降轉、降噪、加 LOGO，檔案較小</small></span></label>
-      <label class="radio"><input type="radio" name="mode" value="copy">
-        <span><b>快速裁切</b><small>不重新編碼，幾秒完成、畫質不變；只能裁切和產生字幕</small></span></label>
+<div class="modal hidden" id="busy">
+  <div class="modal-card">
+    <h3 id="busyTitle">處理中</h3>
+    <div id="busyText" class="muted">…</div>
+    <div class="bar"><div id="busyBar"></div></div>
+    <div class="row end"><button class="btn ghost" id="busyCancel">取消</button></div>
+  </div>
+</div>
+
+<div class="modal hidden" id="exportDlg">
+  <div class="modal-card">
+    <h3>匯出影片</h3>
+    <label class="field">檔名<input type="text" id="exName"></label>
+    <label class="field">解析度
+      <select id="exRes"><option value="0">維持原始</option><option value="1080">1080P</option><option value="720">720P</option><option value="480">480P</option></select></label>
+    <label class="field">畫質
+      <select id="exQuality"><option value="18">最高品質</option><option value="20">高品質</option><option value="23">平衡（推薦）</option><option value="27">小檔案</option></select></label>
+    <label class="field">字幕
+      <select id="exSubs"><option value="burn">燒進畫面＋另存 SRT</option><option value="srt">只另存 SRT（畫面不顯示）</option></select></label>
+    <div id="exResult" class="results"></div>
+    <div class="row end gap">
+      <button class="btn ghost" id="exClose">關閉</button>
+      <button class="btn primary" id="exGo">開始匯出</button>
     </div>
+  </div>
+</div>
 
-    <div class="card encode-only">
-      <h2>畫面</h2>
-      <label class="field">解析度
-        <select id="resolution">
-          <option value="0">維持原始</option>
-          <option value="1080" selected>1080P</option>
-          <option value="720">720P</option>
-          <option value="480">480P</option>
-        </select>
-      </label>
-      <label class="field">畫質
-        <select id="quality">
-          <option value="20">高品質（檔案較大）</option>
-          <option value="23" selected>平衡（推薦）</option>
-          <option value="27">小檔案</option>
-        </select>
-      </label>
-      <label class="field">處理方式
-        <select id="engine">
-          <option value="fast" selected>快速（用顯示卡硬體加速，推薦）</option>
-          <option value="x264">檔案最小（只用 CPU 壓縮，速度慢很多）</option>
-        </select>
-      </label>
-    </div>
+<div id="toast" class="toast hidden"></div>
 
-    <div class="card encode-only">
-      <h2>聲音</h2>
-      <label class="check"><input type="checkbox" id="denoise"> 降噪</label>
-      <label class="field indent">強度
-        <select id="denoiseLevel">
-          <option value="10">輕微（冷氣、風扇）</option>
-          <option value="18" selected>中等</option>
-          <option value="28">強（可能影響人聲）</option>
-        </select>
-      </label>
-      <label class="check"><input type="checkbox" id="loudnorm"> 音量標準化（-14 LUFS，適合網路平台）</label>
-    </div>
-
-    <div class="card encode-only">
-      <h2>LOGO</h2>
-      <label class="file-btn">
-        <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp">
-        <span id="logoName">選擇 LOGO 圖片（建議透明背景 PNG）</span>
-      </label>
-      <button class="btn ghost small hidden" id="logoClear">移除 LOGO</button>
-      <div id="logoOpts" class="hidden">
-        <label class="field">位置
-          <select id="logoPos">
-            <option value="tr" selected>右上</option>
-            <option value="tl">左上</option>
-            <option value="br">右下</option>
-            <option value="bl">左下</option>
-          </select>
-        </label>
-        <label class="field">大小 <output id="logoSizeOut">12%</output>
-          <input type="range" id="logoSize" min="4" max="35" value="12">
-        </label>
-        <label class="field">不透明度 <output id="logoOpacityOut">90%</output>
-          <input type="range" id="logoOpacity" min="20" max="100" value="90">
-        </label>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>字幕（SRT）</h2>
-      <label class="check"><input type="checkbox" id="srtOn"> 自動產生字幕</label>
-      <div id="srtOpts" class="hidden">
-        <label class="field">語言
-          <select id="srtLang">
-            <option value="chinese" selected>中文</option>
-            <option value="english">英文</option>
-            <option value="japanese">日文</option>
-            <option value="">自動偵測</option>
-          </select>
-        </label>
-        <label class="field">辨識模型
-          <select id="srtModel">
-            <option value="base">快速（base，首次下載約 80MB）</option>
-            <option value="small">標準（small，首次下載約 250MB）</option>
-            <option value="medium" selected>medium（與電腦版相同模型，約 700MB～1GB）</option>
-            <option value="turbo">最準確（large-v3-turbo，約 760MB，需支援 WebGPU）</option>
-          </select>
-        </label>
-        <label class="check"><input type="checkbox" id="srtTrad" checked> 轉成台灣繁體用字</label>
-        <label class="check encode-or-copy"><input type="checkbox" id="srtEmbed"> 把字幕嵌入影片（可開關的軟字幕）</label>
-        <p class="hint">模型第一次使用時會下載，之後存在瀏覽器裡，不用再下載。</p>
-      </div>
-    </div>
-  </aside>
-</main>
-
-<footer class="foot">影片只在你的電腦上處理，不會上傳到任何伺服器。建議使用最新版 Chrome 或 Edge。</footer>
-
-<script type="module" src="app.js"></script>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>
